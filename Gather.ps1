@@ -13,6 +13,7 @@
     2020-04-13 v. 1.0.4: Additional variables when executed in Full OS: OsLocale, WindowsInstallationType, WindowsProductName, TimeZone. 
                          Added desktop chassis type "35".
     2023-04-09 v. 1.0.5: Added variable 'SystemSKUNumber' (According to advice from Mike Terrill)
+    2023-11-21 - GARY BLOK - Added UBR for the OS on C:\
 #>
 
 param (
@@ -234,6 +235,19 @@ function Get-Bitlocker {
     $TSvars.Add("BitlockerEncryptionType", $BitlockerEncryptionType)
 }
 
+function Get-UBR {
+    if ($env:SystemDrive -eq "X:"){
+        $Info = DISM.exe /image:c:\ /Get-CurrentEdition
+        $UBR = ($Info | Where-Object {$_ -match "Image Version"}).replace("Image Version: ","")
+    }
+    else {
+        $Info = DISM.exe /online /Get-CurrentEdition
+        $UBR = ($Info | Where-Object {$_ -match "Image Version"}).replace("Image Version: ","")
+    }
+    #return $UBR
+    $TSvars.Add("CDriveUBR", $UBR)
+}
+
 Get-ComputerSystemProductInfo
 Get-ComputerSystemInfo
 Get-Product
@@ -246,6 +260,7 @@ Get-BatteryStatus
 Get-Architecture
 Get-Processor
 Get-Bitlocker
+Get-UBR
 
 if($Debug) {
     $TSvars.Keys | Sort-Object |% {
