@@ -1,6 +1,6 @@
-﻿<#
+<#
     Name: Gather.ps1
-    Actual version: 1.0.5
+    Actual version: 1.0.7
     Author: Johan Schrewelius, Onevinn AB
     Date: 2018-10-17 v. 1.0.0
     Command: powershell.exe -executionpolicy bypass -file Gather.ps1 [-debug]
@@ -14,6 +14,7 @@
                          Added desktop chassis type "35".
     2023-04-09 v. 1.0.5: Added variable 'SystemSKUNumber' (According to advice from Mike Terrill)
     2023-11-21 - GARY BLOK - Added UBR for the OS on C:\
+    2023-15-12 v. 1.0.7: Various bug fixes to prevent error during TS
 #>
 
 param (
@@ -67,7 +68,9 @@ function Get-ComputerSystemInfo {
 
     $cmp = gwmi -Class 'Win32_ComputerSystem'
     $TSvars.Add("Memory", ($cmp.TotalPhysicalMemory / 1024 / 1024).ToString())
-    $TSvars.Add("SystemSKUNumber", $cmp.SystemSKUNumber)
+    if($cmp.SystemSKUNumber){
+        $TSvars.Add("SystemSKUNumber", $cmp.SystemSKUNumber)
+    }
 }
 
 function Get-Product {
@@ -187,7 +190,7 @@ function Get-Architecture {
 
 function Get-Processor {
 
-    $proc = gwmi -Class 'Win32_Processor' 
+    $proc = gwmi -Class 'Win32_Processor' | Select-Object -First '1'
     $TSvars.Add("ProcessorSpeed", $proc.MaxClockSpeed.ToString())
 }
 
@@ -238,14 +241,18 @@ function Get-Bitlocker {
 function Get-UBR {
     if ($env:SystemDrive -eq "X:"){
         $Info = DISM.exe /image:c:\ /Get-CurrentEdition
-        $UBR = ($Info | Where-Object {$_ -match "Image Version"}).replace("Image Version: ","")
+        $UBR = ($Info | Where-Object {$_ -match "Image Version"}) -replace "Image Version: "
     }
     else {
         $Info = DISM.exe /online /Get-CurrentEdition
-        $UBR = ($Info | Where-Object {$_ -match "Image Version"}).replace("Image Version: ","")
+        $UBR = ($Info | Where-Object {$_ -match "Image Version"}) -replace "Image Version: "
     }
-    #return $UBR
-    $TSvars.Add("CDriveUBR", $UBR)
+    # Reset $LastExitCode to 0 if DISM errors
+    $global:LastExitCode = 0
+    if ($UBR) {
+        #return $UBR
+        $TSvars.Add("CDriveUBR", $UBR)
+    }
 }
 
 Get-ComputerSystemProductInfo
@@ -289,6 +296,6 @@ else {
     }
 
     $TSvars.Keys |% {
-        $tsenv.Value($_) = $TSvars[$_]
+        $tsenv.Value($_) = $TSvars[$_].tostring()
     }
 }
