@@ -16,6 +16,7 @@
     2023-11-21 - GARY BLOK - Added UBR for the OS on C:\
     2023-15-12 v. 1.0.7: Various bug fixes to prevent error during TS
     2024-02-28 - GARY BLOK - Adding MachineMatchID - a unique idea used to match devices to driver packs #MMS2024
+    2025-08-21 - SCOTT CARTER - Replaced gwmi with Get-WmmiObject and updated $virtualHosts
 #>
 
 param (
@@ -29,7 +30,7 @@ $DesktopChassisTypes = @("3","4","5","6","7","13","15","16","35")
 $LatopChassisTypes = @("8","9","10","11","12","14","18","21","30","31")
 $ServerChassisTypes = @("23")
 
-$VirtualHosts = @{ "Virtual Machine"="Hyper-V"; "VMware Virtual Platform"="VMware"; "VMware7,1"="VMware"; "VirtualBox"="VirtualBox"; "Xen"="Xen" }
+$VirtualHosts = @{ "Virtual Machine"="Hyper-V"; "QEMU"="ProxMox"; "VMware Virtual Platform"="VMware"; "VMware7,1"="VMware"; "VMware20,1" = "VMware"; "VirtualBox"="VirtualBox"; "Xen"="Xen" }
 
 $EncryptionMethods = @{ 0 = "UNSPECIFIED";
                         1 = 'AES_128_WITH_DIFFUSER';
@@ -42,10 +43,13 @@ $EncryptionMethods = @{ 0 = "UNSPECIFIED";
 
 function Get-ComputerSystemProductInfo {
 
-    $cmp = gwmi -Class 'Win32_ComputerSystemProduct'
+    $cmp = Get-WmiObject -Class 'Win32_ComputerSystemProduct'
 
     If ($cmp.Vendor -eq "LENOVO" -and $UseOldLenovoName -ne $true) {
         $tempModel = $cmp.Version
+    }
+    elseif ($cmp.Vendor -eq "QEMU") {
+        $tempModel = $cmp.Vendor
     }
     else {
         $tempModel = $cmp.Name
@@ -67,7 +71,7 @@ function Get-ComputerSystemProductInfo {
 
 function Get-ComputerSystemInfo {
 
-    $cmp = gwmi -Class 'Win32_ComputerSystem'
+    $cmp = Get-WmiObject -Class 'Win32_ComputerSystem'
     $TSvars.Add("Memory", ($cmp.TotalPhysicalMemory / 1024 / 1024).ToString())
     if($cmp.SystemSKUNumber){
         $TSvars.Add("SystemSKUNumber", $cmp.SystemSKUNumber)
@@ -76,13 +80,13 @@ function Get-ComputerSystemInfo {
 
 function Get-Product {
 
-    $bb = gwmi -Class 'Win32_BaseBoard'
+    $bb = Get-WmiObject -Class 'Win32_BaseBoard'
     $TSvars.Add("Product", $bb.Product)
 }
 
 function Get-BiosInfo {
 
-    $bios = gwmi -Class 'Win32_BIOS'
+    $bios = Get-WmiObject -Class 'Win32_BIOS'
     $TSvars.Add("SerialNumber", $bios.SerialNumber)
     $TSvars.Add("BIOSVersion", $bios.SMBIOSBIOSVersion)
     $TSvars.Add("BIOSReleaseDate", $bios.ReleaseDate)
@@ -90,14 +94,14 @@ function Get-BiosInfo {
 
 function Get-OsInfo {
 
-    $Os = gwmi -Class 'Win32_OperatingSystem'
+    $Os = Get-WmiObject -Class 'Win32_OperatingSystem'
     $TSvars.Add("OSCurrentVersion", $Os.Version)
     $TSvars.Add("OSCurrentBuild", $Os.BuildNumber)
 }
 
 function Get-SystemEnclosureInfo {
 
-    $chassi = gwmi -Class 'Win32_SystemEnclosure' 
+    $chassi = Get-WmiObject -Class 'Win32_SystemEnclosure' 
     $TSvars.Add("AssetTag", $chassi.SMBIOSAssetTag)
 
     $chassi.ChassisTypes | foreach {
@@ -127,7 +131,7 @@ function Get-SystemEnclosureInfo {
 
 function Get-NicConfigurationInfo {
 
-    (gwmi -Class 'Win32_NetworkAdapterConfiguration' -Filter "IPEnabled = 1") | foreach {
+    (Get-WmiObject -Class 'Win32_NetworkAdapterConfiguration' -Filter "IPEnabled = 1") | foreach {
         
         $_.IPAddress |% {
             if($_ -ne $null) {
@@ -160,14 +164,14 @@ function Get-NicConfigurationInfo {
 
 function Get-MacInfo {
 
-    $nic = (gwmi -Class 'Win32_NetworkAdapter' -Filter "NetConnectionStatus = 2")
+    $nic = (Get-WmiObject -Class 'Win32_NetworkAdapter' -Filter "NetConnectionStatus = 2")
     $TSvars.Add("MacAddress", $nic.MACAddress -join ',')
 }
 
 function Get-BatteryStatus {
 
     try {
-        $AcConnected = (gwmi -Namespace 'root\wmi' -Query "SELECT * FROM BatteryStatus Where Voltage > 0" -EA SilentlyContinue).PowerOnline
+        $AcConnected = (Get-WmiObject -Namespace 'root\wmi' -Query "SELECT * FROM BatteryStatus Where Voltage > 0" -EA SilentlyContinue).PowerOnline
     }
     catch { }
 
@@ -191,7 +195,7 @@ function Get-Architecture {
 
 function Get-Processor {
 
-    $proc = gwmi -Class 'Win32_Processor' | Select-Object -First '1'
+    $proc = Get-WmiObject -Class 'Win32_Processor' | Select-Object -First '1'
     $TSvars.Add("ProcessorSpeed", $proc.MaxClockSpeed.ToString())
 }
 
